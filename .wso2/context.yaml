@@ -1,0 +1,3 @@
+- org: mohandemo
+  project: default
+  local: true

@@ -1,0 +1,1071 @@
+openapi: 3.0.3
+info:
+  title: P&C Insurance Claims Management API
+  description: >
+    Mock REST API for handling Property & Casualty (P&C) insurance claims
+    operations. Supports the full claims lifecycle including filing, reviewing,
+    investigating, approving, denying, closing, and reopening claims. Also
+    manages adjuster notes, supporting documents, and settlement payments
+    associated with each claim.
+  version: 1.0.0
+  contact:
+    name: Insurance Platform Team
+
+servers:
+  - url: http://localhost:8081/claims/v1
+    description: Local development server
+
+tags:
+  - name: Claims
+    description: Core claim lifecycle operations
+  - name: Notes
+    description: Adjuster notes attached to a claim
+  - name: Documents
+    description: Supporting documents submitted for a claim
+  - name: Payments
+    description: Settlement payments recorded against a claim
+
+paths:
+
+  # ─── Claims ─────────────────────────────────────────────────────────────────
+
+  /claims:
+    get:
+      tags: [Claims]
+      summary: List all claims
+      description: Returns a paginated list of claims, optionally filtered by policy ID, claim type, and status.
+      operationId: listClaims
+      parameters:
+        - name: policyId
+          in: query
+          description: Filter by the associated policy ID
+          required: false
+          schema:
+            type: string
+          example: pol-001
+        - name: claimType
+          in: query
+          description: Filter by claim type
+          required: false
+          schema:
+            $ref: '#/components/schemas/ClaimType'
+        - name: status
+          in: query
+          description: Filter by claim status
+          required: false
+          schema:
+            $ref: '#/components/schemas/ClaimStatus'
+        - name: page
+          in: query
+          description: Page number (1-based)
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: pageSize
+          in: query
+          description: Number of records per page
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Paginated list of claims
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimListResponse'
+              example:
+                total: 10
+                page: 1
+                pageSize: 10
+                claims:
+                  - claimId: clm-001
+                    claimNumber: CLM-AUTO001
+                    policyId: pol-001
+                    policyNumber: POL-AUTO001
+                    claimType: AUTO_COLLISION
+                    claimStatus: APPROVED
+                    claimant:
+                      customerId: cust-001
+                      firstName: Alice
+                      lastName: Johnson
+                      email: alice.johnson@example.com
+                      phoneNumber: "+1-555-0101"
+                    lossDate: "2025-11-10"
+                    reportedDate: "2025-11-11"
+                    lossLocation:
+                      streetLine1: I-55 Northbound Mile Marker 42
+                      city: Springfield
+                      state: IL
+                      zipCode: "62701"
+                      country: US
+                    lossDescription: Rear-end collision on the highway.
+                    estimatedLossAmount: 8500.00
+                    approvedAmount: 7500.00
+                    deductibleAmount: 1000.00
+                    damagedVehicle:
+                      vin: 1HGBH41JXMN109186
+                      make: Honda
+                      model: Civic
+                      year: 2022
+                      licensePlate: IL-ABC123
+                      damageDescription: Rear bumper crushed, trunk lid bent
+                    assignedAdjusterId: adj-001
+                    assignedAdjusterName: Tom Bradley
+                    notes: []
+                    documents: []
+                    payments: []
+                    closedDate: null
+                    denialReason: null
+                    createdAt: "2026-07-05T20:00:00Z"
+                    updatedAt: "2026-07-05T20:00:00Z"
+
+    post:
+      tags: [Claims]
+      summary: File a new claim
+      description: >
+        Files a new insurance claim against an existing policy. The claim is
+        created with status SUBMITTED. Loss description is required.
+      operationId: fileClaim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimFileRequest'
+            example:
+              policyId: pol-001
+              policyNumber: POL-AUTO001
+              claimType: AUTO_COLLISION
+              claimant:
+                customerId: cust-001
+                firstName: Alice
+                lastName: Johnson
+                email: alice.johnson@example.com
+                phoneNumber: "+1-555-0101"
+              lossDate: "2026-07-01"
+              lossLocation:
+                streetLine1: 500 Main Street
+                city: Springfield
+                state: IL
+                zipCode: "62701"
+                country: US
+              lossDescription: Vehicle struck from behind at a red light causing rear bumper damage.
+              estimatedLossAmount: 3500.00
+              damagedVehicle:
+                vin: 1HGBH41JXMN109186
+                make: Honda
+                model: Civic
+                year: 2022
+                licensePlate: IL-ABC123
+                damageDescription: Rear bumper cracked and dented
+      responses:
+        '201':
+          description: Claim filed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Claim'
+        '400':
+          description: Invalid request (e.g. missing loss description)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /claims/{claimId}:
+    get:
+      tags: [Claims]
+      summary: Get a claim by ID
+      description: Returns the full details of a single claim including notes, documents, and payments.
+      operationId: getClaimById
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+      responses:
+        '200':
+          description: Claim found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Claim'
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags: [Claims]
+      summary: Update a claim
+      description: >
+        Updates mutable fields of a claim such as status, estimated/approved
+        amounts, deductible, adjuster assignment, and denial reason. All fields
+        are optional — only provided fields are updated.
+      operationId: updateClaim
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimUpdateRequest'
+            example:
+              claimStatus: UNDER_REVIEW
+              assignedAdjusterId: adj-002
+              assignedAdjusterName: Sandra Mills
+              estimatedLossAmount: 9200.00
+              deductibleAmount: 1000.00
+      responses:
+        '200':
+          description: Claim updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Claim'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /claims/{claimId}/close:
+    post:
+      tags: [Claims]
+      summary: Close a claim
+      description: >
+        Closes an open claim. Returns 400 if the claim is already closed.
+        A closure date and notes are required.
+      operationId: closeClaim
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimCloseRequest'
+            example:
+              closedDate: "2026-07-10"
+              closureNotes: All repairs completed and payment issued. Claim closed.
+      responses:
+        '200':
+          description: Claim closed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Claim'
+        '400':
+          description: Claim is already closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /claims/{claimId}/reopen:
+    post:
+      tags: [Claims]
+      summary: Reopen a claim
+      description: >
+        Reopens a CLOSED or DENIED claim, setting its status to REOPENED.
+        Returns 400 if the claim is in any other state.
+      operationId: reopenClaim
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+      responses:
+        '200':
+          description: Claim reopened successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Claim'
+        '400':
+          description: Claim is not in a closeable state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── Notes ──────────────────────────────────────────────────────────────────
+
+  /claims/{claimId}/notes:
+    get:
+      tags: [Notes]
+      summary: List notes for a claim
+      description: Returns all adjuster notes attached to the specified claim.
+      operationId: listClaimNotes
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+      responses:
+        '200':
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClaimNote'
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags: [Notes]
+      summary: Add a note to a claim
+      description: Adds a new adjuster note to the specified claim. Note text cannot be empty.
+      operationId: addClaimNote
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimNoteRequest'
+            example:
+              authorId: adj-001
+              authorName: Tom Bradley
+              noteText: Contacted insured to schedule vehicle inspection. Appointment set for 2026-07-12.
+      responses:
+        '201':
+          description: Note added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimNote'
+        '400':
+          description: Note text is empty
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── Documents ──────────────────────────────────────────────────────────────
+
+  /claims/{claimId}/documents:
+    get:
+      tags: [Documents]
+      summary: List documents for a claim
+      description: Returns all documents attached to the specified claim.
+      operationId: listClaimDocuments
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+      responses:
+        '200':
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClaimDocument'
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags: [Documents]
+      summary: Add a document to a claim
+      description: Attaches a new document reference to the specified claim. File name cannot be empty.
+      operationId: addClaimDocument
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimDocumentRequest'
+            example:
+              documentType: REPAIR_ESTIMATE
+              fileName: body_shop_estimate.pdf
+              fileUrl: https://docs.example.com/clm-001/body_shop_estimate.pdf
+              uploadedBy: alice.johnson@example.com
+      responses:
+        '201':
+          description: Document added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDocument'
+        '400':
+          description: File name is empty
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /claims/{claimId}/documents/{documentId}:
+    delete:
+      tags: [Documents]
+      summary: Remove a document from a claim
+      description: Removes a specific document from the specified claim.
+      operationId: removeClaimDocument
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+        - $ref: '#/components/parameters/documentId'
+      responses:
+        '200':
+          description: Document removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Claim or document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── Payments ────────────────────────────────────────────────────────────────
+
+  /claims/{claimId}/payments:
+    get:
+      tags: [Payments]
+      summary: List payments for a claim
+      description: Returns all settlement payments recorded against the specified claim.
+      operationId: listClaimPayments
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+      responses:
+        '200':
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClaimPayment'
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags: [Payments]
+      summary: Record a payment for a claim
+      description: >
+        Records a new settlement payment against the specified claim. The payment
+        is created with status PENDING. Payment amount must be greater than zero.
+      operationId: addClaimPayment
+      parameters:
+        - $ref: '#/components/parameters/claimId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimPaymentRequest'
+            example:
+              paymentAmount: 6500.00
+              paymentMethod: BANK_TRANSFER
+              payeeName: Springfield Auto Repair
+              payeeAccountRef: ACC-78901
+              description: Repair settlement payment for rear-end collision
+      responses:
+        '201':
+          description: Payment recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimPayment'
+        '400':
+          description: Invalid payment amount (must be > 0)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+# ─── Components ───────────────────────────────────────────────────────────────
+
+components:
+
+  parameters:
+    claimId:
+      name: claimId
+      in: path
+      required: true
+      description: Unique identifier of the claim
+      schema:
+        type: string
+      example: clm-001
+
+    documentId:
+      name: documentId
+      in: path
+      required: true
+      description: Unique identifier of the document
+      schema:
+        type: string
+      example: doc-001
+
+  schemas:
+
+    # ── Enumerations ──────────────────────────────────────────────────────────
+
+    ClaimStatus:
+      type: string
+      enum:
+        - SUBMITTED
+        - UNDER_REVIEW
+        - INVESTIGATION
+        - APPROVED
+        - PARTIALLY_APPROVED
+        - DENIED
+        - CLOSED
+        - REOPENED
+      description: Current lifecycle status of a claim
+
+    ClaimType:
+      type: string
+      enum:
+        - AUTO_COLLISION
+        - AUTO_COMPREHENSIVE
+        - AUTO_LIABILITY
+        - PROPERTY_DAMAGE
+        - THEFT
+        - FIRE
+        - WATER_DAMAGE
+        - LIABILITY
+        - GENERAL_LIABILITY
+      description: Type of loss event that triggered the claim
+
+    DocumentType:
+      type: string
+      enum:
+        - POLICE_REPORT
+        - PHOTOS
+        - REPAIR_ESTIMATE
+        - MEDICAL_REPORT
+        - INVOICE
+        - PROOF_OF_OWNERSHIP
+        - WITNESS_STATEMENT
+        - OTHER
+      description: Category of the supporting document
+
+    PaymentStatus:
+      type: string
+      enum:
+        - PENDING
+        - PROCESSED
+        - FAILED
+        - REVERSED
+      description: Processing status of a settlement payment
+
+    PaymentMethod:
+      type: string
+      enum:
+        - BANK_TRANSFER
+        - CHECK
+        - DIRECT_DEPOSIT
+      description: Method used to disburse the settlement payment
+
+    # ── Sub-types ─────────────────────────────────────────────────────────────
+
+    Claimant:
+      type: object
+      required: [customerId, firstName, lastName, email, phoneNumber]
+      properties:
+        customerId:
+          type: string
+          example: cust-001
+        firstName:
+          type: string
+          example: Alice
+        lastName:
+          type: string
+          example: Johnson
+        email:
+          type: string
+          format: email
+          example: alice.johnson@example.com
+        phoneNumber:
+          type: string
+          example: "+1-555-0101"
+
+    LossLocation:
+      type: object
+      required: [streetLine1, city, state, zipCode, country]
+      properties:
+        streetLine1:
+          type: string
+          example: I-55 Northbound Mile Marker 42
+        streetLine2:
+          type: string
+          example: Near Exit 88
+        city:
+          type: string
+          example: Springfield
+        state:
+          type: string
+          example: IL
+        zipCode:
+          type: string
+          example: "62701"
+        country:
+          type: string
+          example: US
+
+    DamagedVehicle:
+      type: object
+      required: [vin, make, model, year, licensePlate, damageDescription]
+      properties:
+        vin:
+          type: string
+          example: 1HGBH41JXMN109186
+        make:
+          type: string
+          example: Honda
+        model:
+          type: string
+          example: Civic
+        year:
+          type: integer
+          example: 2022
+        licensePlate:
+          type: string
+          example: IL-ABC123
+        damageDescription:
+          type: string
+          example: Rear bumper crushed, trunk lid bent, tail lights broken
+
+    ClaimNote:
+      type: object
+      required: [noteId, claimId, authorId, authorName, noteText, createdAt]
+      properties:
+        noteId:
+          type: string
+          example: note-001
+        claimId:
+          type: string
+          example: clm-001
+        authorId:
+          type: string
+          example: adj-001
+        authorName:
+          type: string
+          example: Tom Bradley
+        noteText:
+          type: string
+          example: Inspection completed. Damage consistent with reported collision. Approved for repair.
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-11-15T10:00:00Z"
+
+    ClaimNoteRequest:
+      type: object
+      required: [authorId, authorName, noteText]
+      properties:
+        authorId:
+          type: string
+          example: adj-001
+        authorName:
+          type: string
+          example: Tom Bradley
+        noteText:
+          type: string
+          minLength: 1
+          example: Contacted insured to schedule vehicle inspection.
+
+    ClaimDocument:
+      type: object
+      required: [documentId, claimId, documentType, fileName, fileUrl, uploadedBy, uploadedAt]
+      properties:
+        documentId:
+          type: string
+          example: doc-001
+        claimId:
+          type: string
+          example: clm-001
+        documentType:
+          $ref: '#/components/schemas/DocumentType'
+        fileName:
+          type: string
+          example: police_report_clm001.pdf
+        fileUrl:
+          type: string
+          format: uri
+          example: https://docs.example.com/clm-001/police_report.pdf
+        uploadedBy:
+          type: string
+          example: alice.johnson@example.com
+        uploadedAt:
+          type: string
+          format: date-time
+          example: "2025-11-11T09:00:00Z"
+
+    ClaimDocumentRequest:
+      type: object
+      required: [documentType, fileName, fileUrl, uploadedBy]
+      properties:
+        documentType:
+          $ref: '#/components/schemas/DocumentType'
+        fileName:
+          type: string
+          minLength: 1
+          example: repair_estimate.pdf
+        fileUrl:
+          type: string
+          format: uri
+          example: https://docs.example.com/clm-001/repair_estimate.pdf
+        uploadedBy:
+          type: string
+          example: alice.johnson@example.com
+
+    ClaimPayment:
+      type: object
+      required: [paymentId, claimId, paymentAmount, paymentMethod, paymentStatus, payeeName, description, createdAt]
+      properties:
+        paymentId:
+          type: string
+          example: pay-001
+        claimId:
+          type: string
+          example: clm-001
+        paymentAmount:
+          type: number
+          format: decimal
+          example: 6500.00
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        paymentStatus:
+          $ref: '#/components/schemas/PaymentStatus'
+        payeeName:
+          type: string
+          example: Springfield Auto Repair
+        payeeAccountRef:
+          type: string
+          nullable: true
+          description: Bank account or check reference number
+          example: ACC-78901
+        description:
+          type: string
+          example: Repair settlement payment
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-11-20T14:00:00Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-11-18T10:00:00Z"
+
+    ClaimPaymentRequest:
+      type: object
+      required: [paymentAmount, paymentMethod, payeeName, description]
+      properties:
+        paymentAmount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          example: 6500.00
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        payeeName:
+          type: string
+          example: Springfield Auto Repair
+        payeeAccountRef:
+          type: string
+          nullable: true
+          example: ACC-78901
+        description:
+          type: string
+          example: Repair settlement payment for rear-end collision
+
+    # ── Claim schemas ─────────────────────────────────────────────────────────
+
+    Claim:
+      type: object
+      required:
+        - claimId
+        - claimNumber
+        - policyId
+        - policyNumber
+        - claimType
+        - claimStatus
+        - claimant
+        - lossDate
+        - reportedDate
+        - lossLocation
+        - lossDescription
+        - estimatedLossAmount
+        - approvedAmount
+        - deductibleAmount
+        - damagedVehicle
+        - assignedAdjusterId
+        - assignedAdjusterName
+        - notes
+        - documents
+        - payments
+        - closedDate
+        - denialReason
+        - createdAt
+        - updatedAt
+      properties:
+        claimId:
+          type: string
+          example: clm-001
+        claimNumber:
+          type: string
+          example: CLM-AUTO001
+        policyId:
+          type: string
+          example: pol-001
+        policyNumber:
+          type: string
+          example: POL-AUTO001
+        claimType:
+          $ref: '#/components/schemas/ClaimType'
+        claimStatus:
+          $ref: '#/components/schemas/ClaimStatus'
+        claimant:
+          $ref: '#/components/schemas/Claimant'
+        lossDate:
+          type: string
+          format: date
+          example: "2025-11-10"
+        reportedDate:
+          type: string
+          format: date
+          example: "2025-11-11"
+        lossLocation:
+          $ref: '#/components/schemas/LossLocation'
+        lossDescription:
+          type: string
+          example: Rear-end collision on the highway. Vehicle sustained significant damage to the rear bumper and trunk.
+        estimatedLossAmount:
+          type: number
+          format: decimal
+          example: 8500.00
+        approvedAmount:
+          type: number
+          format: decimal
+          description: Amount approved for settlement (0 until adjudicated)
+          example: 7500.00
+        deductibleAmount:
+          type: number
+          format: decimal
+          example: 1000.00
+        damagedVehicle:
+          $ref: '#/components/schemas/DamagedVehicle'
+          nullable: true
+        assignedAdjusterId:
+          type: string
+          nullable: true
+          example: adj-001
+        assignedAdjusterName:
+          type: string
+          nullable: true
+          example: Tom Bradley
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimNote'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimDocument'
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimPayment'
+        closedDate:
+          type: string
+          format: date
+          nullable: true
+          example: null
+        denialReason:
+          type: string
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-07-05T20:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-07-05T20:00:00Z"
+
+    ClaimFileRequest:
+      type: object
+      required: [policyId, policyNumber, claimType, claimant, lossDate, lossLocation, lossDescription, estimatedLossAmount, damagedVehicle]
+      properties:
+        policyId:
+          type: string
+          example: pol-001
+        policyNumber:
+          type: string
+          example: POL-AUTO001
+        claimType:
+          $ref: '#/components/schemas/ClaimType'
+        claimant:
+          $ref: '#/components/schemas/Claimant'
+        lossDate:
+          type: string
+          format: date
+          example: "2026-07-01"
+        lossLocation:
+          $ref: '#/components/schemas/LossLocation'
+        lossDescription:
+          type: string
+          minLength: 1
+          example: Vehicle struck from behind at a red light causing rear bumper damage.
+        estimatedLossAmount:
+          type: number
+          format: decimal
+          example: 3500.00
+        damagedVehicle:
+          $ref: '#/components/schemas/DamagedVehicle'
+          nullable: true
+
+    ClaimUpdateRequest:
+      type: object
+      description: All fields are optional. Only provided fields will be updated.
+      properties:
+        claimStatus:
+          $ref: '#/components/schemas/ClaimStatus'
+          nullable: true
+        estimatedLossAmount:
+          type: number
+          format: decimal
+          nullable: true
+          example: 9200.00
+        approvedAmount:
+          type: number
+          format: decimal
+          nullable: true
+          example: 8200.00
+        deductibleAmount:
+          type: number
+          format: decimal
+          nullable: true
+          example: 1000.00
+        assignedAdjusterId:
+          type: string
+          nullable: true
+          example: adj-002
+        assignedAdjusterName:
+          type: string
+          nullable: true
+          example: Sandra Mills
+        denialReason:
+          type: string
+          nullable: true
+          example: Damage pre-dates the policy effective date.
+
+    ClaimCloseRequest:
+      type: object
+      required: [closedDate, closureNotes]
+      properties:
+        closedDate:
+          type: string
+          format: date
+          example: "2026-07-10"
+        closureNotes:
+          type: string
+          example: All repairs completed and payment issued. Claim closed.
+
+    ClaimListResponse:
+      type: object
+      required: [total, page, pageSize, claims]
+      properties:
+        total:
+          type: integer
+          description: Total number of matching claims
+          example: 10
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 10
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/Claim'
+
+    # ── Common response schemas ────────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      required: [errorCode, message, timestamp]
+      properties:
+        errorCode:
+          type: string
+          description: Machine-readable error code
+          example: CLAIM_NOT_FOUND
+        message:
+          type: string
+          description: Human-readable error description
+          example: "Claim with ID 'clm-999' not found"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-07-05T20:00:00Z"
+
+    SuccessResponse:
+      type: object
+      required: [message, timestamp]
+      properties:
+        message:
+          type: string
+          example: "Document 'doc-001' removed from claim 'clm-001'"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-07-05T20:00:00Z"

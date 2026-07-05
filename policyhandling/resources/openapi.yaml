@@ -1,0 +1,959 @@
+openapi: 3.0.3
+info:
+  title: P&C Insurance Policy Management API
+  description: >
+    Mock REST API for handling Property & Casualty (P&C) insurance policy and
+    quote operations. Supports full lifecycle management of policies (AUTO, HOME,
+    COMMERCIAL, RENTERS) and quotes including creation, retrieval, update,
+    cancellation, and quote-to-policy binding.
+  version: 1.0.0
+  contact:
+    name: Insurance Platform Team
+
+servers:
+  - url: http://localhost:8080/insurance/v1
+    description: Local development server
+
+tags:
+  - name: Policies
+    description: Operations for managing insurance policies
+  - name: Quotes
+    description: Operations for managing insurance quotes
+
+paths:
+
+  # ─── Policies ───────────────────────────────────────────────────────────────
+
+  /policies:
+    get:
+      tags: [Policies]
+      summary: List all policies
+      description: Returns a paginated list of policies, optionally filtered by type and status.
+      operationId: listPolicies
+      parameters:
+        - name: policyType
+          in: query
+          description: Filter by policy type
+          required: false
+          schema:
+            $ref: '#/components/schemas/PolicyType'
+        - name: status
+          in: query
+          description: Filter by policy status
+          required: false
+          schema:
+            $ref: '#/components/schemas/PolicyStatus'
+        - name: page
+          in: query
+          description: Page number (1-based)
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: pageSize
+          in: query
+          description: Number of records per page
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Paginated list of policies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyListResponse'
+              example:
+                total: 3
+                page: 1
+                pageSize: 10
+                policies:
+                  - policyId: pol-001
+                    policyNumber: POL-AUTO001
+                    policyType: AUTO
+                    policyStatus: ACTIVE
+                    policyHolder:
+                      customerId: cust-001
+                      firstName: Alice
+                      lastName: Johnson
+                      email: alice.johnson@example.com
+                      phoneNumber: "+1-555-0101"
+                      mailingAddress:
+                        streetLine1: 123 Maple Street
+                        city: Springfield
+                        state: IL
+                        zipCode: "62701"
+                        country: US
+                    effectiveDate: "2025-01-01"
+                    expirationDate: "2026-01-01"
+                    annualPremium: 1200.00
+                    coverages:
+                      - coverageType: LIABILITY
+                        limitAmount: 100000.00
+                        deductibleAmount: 500.00
+                        premiumAmount: 600.00
+                    insuredVehicle:
+                      vin: 1HGBH41JXMN109186
+                      make: Honda
+                      model: Civic
+                      year: 2022
+                      licensePlate: IL-ABC123
+                    insuredProperty: null
+                    createdAt: "2026-07-05T19:00:00Z"
+                    updatedAt: "2026-07-05T19:00:00Z"
+
+    post:
+      tags: [Policies]
+      summary: Create a new policy
+      description: Creates a new insurance policy. Annual premium is automatically calculated from the provided coverages.
+      operationId: createPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyCreateRequest'
+            example:
+              policyType: AUTO
+              policyHolder:
+                customerId: cust-010
+                firstName: John
+                lastName: Doe
+                email: john.doe@example.com
+                phoneNumber: "+1-555-1234"
+                mailingAddress:
+                  streetLine1: 100 Main St
+                  city: Nashville
+                  state: TN
+                  zipCode: "37201"
+                  country: US
+              effectiveDate: "2026-08-01"
+              expirationDate: "2027-08-01"
+              coverages:
+                - coverageType: LIABILITY
+                  limitAmount: 100000.00
+                  deductibleAmount: 500.00
+                  premiumAmount: 620.00
+                - coverageType: COLLISION
+                  limitAmount: 45000.00
+                  deductibleAmount: 1000.00
+                  premiumAmount: 380.00
+              insuredVehicle:
+                vin: 3VWFE21C04M000001
+                make: Volkswagen
+                model: Jetta
+                year: 2023
+                licensePlate: TN-DEF456
+              insuredProperty: null
+      responses:
+        '201':
+          description: Policy created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        '400':
+          description: Invalid request (e.g. no coverages provided)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /policies/{policyId}:
+    get:
+      tags: [Policies]
+      summary: Get a policy by ID
+      description: Returns the full details of a single policy.
+      operationId: getPolicyById
+      parameters:
+        - $ref: '#/components/parameters/policyId'
+      responses:
+        '200':
+          description: Policy found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags: [Policies]
+      summary: Update a policy
+      description: Updates mutable fields of an existing policy (dates, coverages, insured asset). Omit fields that should remain unchanged.
+      operationId: updatePolicy
+      parameters:
+        - $ref: '#/components/parameters/policyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyUpdateRequest'
+            example:
+              expirationDate: "2027-01-01"
+              coverages:
+                - coverageType: LIABILITY
+                  limitAmount: 150000.00
+                  deductibleAmount: 500.00
+                  premiumAmount: 700.00
+      responses:
+        '200':
+          description: Policy updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags: [Policies]
+      summary: Delete a policy
+      description: Permanently removes a policy from the store.
+      operationId: deletePolicy
+      parameters:
+        - $ref: '#/components/parameters/policyId'
+      responses:
+        '200':
+          description: Policy deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /policies/{policyId}/cancel:
+    post:
+      tags: [Policies]
+      summary: Cancel a policy
+      description: Cancels an active or pending policy. Returns 400 if the policy is already cancelled.
+      operationId: cancelPolicy
+      parameters:
+        - $ref: '#/components/parameters/policyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyCancelRequest'
+            example:
+              cancellationReason: Insured sold the vehicle
+              cancellationDate: "2026-07-15"
+      responses:
+        '200':
+          description: Policy cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        '400':
+          description: Policy is already cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── Quotes ─────────────────────────────────────────────────────────────────
+
+  /quotes:
+    get:
+      tags: [Quotes]
+      summary: List all quotes
+      description: Returns a paginated list of quotes, optionally filtered by policy type and status.
+      operationId: listQuotes
+      parameters:
+        - name: policyType
+          in: query
+          description: Filter by policy type
+          required: false
+          schema:
+            $ref: '#/components/schemas/PolicyType'
+        - name: status
+          in: query
+          description: Filter by quote status
+          required: false
+          schema:
+            $ref: '#/components/schemas/QuoteStatus'
+        - name: page
+          in: query
+          description: Page number (1-based)
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: pageSize
+          in: query
+          description: Number of records per page
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Paginated list of quotes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteListResponse'
+
+    post:
+      tags: [Quotes]
+      summary: Request a new quote
+      description: >
+        Submits a quote request. The estimated annual and monthly premiums are
+        automatically calculated from the desired coverages. The quote is issued
+        immediately with a validity date of 2026-12-31.
+      operationId: createQuote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteRequest'
+            example:
+              policyType: HOME
+              applicant:
+                customerId: cust-020
+                firstName: Sarah
+                lastName: Connor
+                email: sarah.connor@example.com
+                phoneNumber: "+1-555-9999"
+                mailingAddress:
+                  streetLine1: 99 Future Ave
+                  city: Los Angeles
+                  state: CA
+                  zipCode: "90001"
+                  country: US
+              riskDetails:
+                vehicle: null
+                property:
+                  propertyId: prop-010
+                  propertyAddress:
+                    streetLine1: 99 Future Ave
+                    city: Los Angeles
+                    state: CA
+                    zipCode: "90001"
+                    country: US
+                  propertyType: Single Family Home
+                  estimatedValue: 650000.00
+                constructionType: Concrete Block
+                buildingAge: 10
+              desiredCoverages:
+                - coverageType: DWELLING
+                  limitAmount: 650000.00
+                  deductibleAmount: 2500.00
+                  premiumAmount: 2200.00
+                - coverageType: LIABILITY
+                  limitAmount: 100000.00
+                  deductibleAmount: 0.00
+                  premiumAmount: 250.00
+              requestedEffectiveDate: "2026-09-01"
+      responses:
+        '201':
+          description: Quote created and issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+        '400':
+          description: Invalid request (e.g. no coverages provided)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /quotes/{quoteId}:
+    get:
+      tags: [Quotes]
+      summary: Get a quote by ID
+      description: Returns the full details of a single quote.
+      operationId: getQuoteById
+      parameters:
+        - $ref: '#/components/parameters/quoteId'
+      responses:
+        '200':
+          description: Quote found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+        '404':
+          description: Quote not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /quotes/{quoteId}/bind:
+    post:
+      tags: [Quotes]
+      summary: Bind a quote to a policy
+      description: >
+        Converts an accepted quote into an active policy. The quote status is
+        updated to BOUND and a new Policy record is created. Returns 400 if the
+        quote is already bound or expired.
+      operationId: bindQuote
+      parameters:
+        - $ref: '#/components/parameters/quoteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteBindRequest'
+            example:
+              quoteId: qte-001
+              effectiveDate: "2026-08-01"
+      responses:
+        '200':
+          description: Quote bound — new policy returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        '400':
+          description: Quote is already bound or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Quote not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /quotes/{quoteId}/expire:
+    post:
+      tags: [Quotes]
+      summary: Expire a quote
+      description: Manually marks a quote as EXPIRED. No request body required.
+      operationId: expireQuote
+      parameters:
+        - $ref: '#/components/parameters/quoteId'
+      responses:
+        '200':
+          description: Quote expired successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+        '404':
+          description: Quote not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+# ─── Components ──────────────────────────────────────────────────────────────
+
+components:
+
+  parameters:
+    policyId:
+      name: policyId
+      in: path
+      required: true
+      description: Unique identifier of the policy
+      schema:
+        type: string
+      example: pol-001
+
+    quoteId:
+      name: quoteId
+      in: path
+      required: true
+      description: Unique identifier of the quote
+      schema:
+        type: string
+      example: qte-001
+
+  schemas:
+
+    # ── Enumerations ──────────────────────────────────────────────────────────
+
+    PolicyType:
+      type: string
+      enum: [AUTO, HOME, COMMERCIAL, RENTERS]
+      description: Line of business / policy type
+
+    PolicyStatus:
+      type: string
+      enum: [ACTIVE, CANCELLED, EXPIRED, PENDING]
+      description: Current lifecycle status of a policy
+
+    QuoteStatus:
+      type: string
+      enum: [DRAFT, ISSUED, ACCEPTED, EXPIRED, BOUND]
+      description: Current lifecycle status of a quote
+
+    CoverageType:
+      type: string
+      enum:
+        - LIABILITY
+        - COLLISION
+        - COMPREHENSIVE
+        - DWELLING
+        - PERSONAL_PROPERTY
+        - GENERAL_LIABILITY
+      description: Type of insurance coverage
+
+    # ── Shared sub-types ──────────────────────────────────────────────────────
+
+    Address:
+      type: object
+      required: [streetLine1, city, state, zipCode, country]
+      properties:
+        streetLine1:
+          type: string
+          example: 123 Maple Street
+        streetLine2:
+          type: string
+          example: Apt 4B
+        city:
+          type: string
+          example: Springfield
+        state:
+          type: string
+          example: IL
+        zipCode:
+          type: string
+          example: "62701"
+        country:
+          type: string
+          example: US
+
+    Coverage:
+      type: object
+      required: [coverageType, limitAmount, deductibleAmount, premiumAmount]
+      properties:
+        coverageType:
+          $ref: '#/components/schemas/CoverageType'
+        limitAmount:
+          type: number
+          format: decimal
+          example: 100000.00
+        deductibleAmount:
+          type: number
+          format: decimal
+          example: 500.00
+        premiumAmount:
+          type: number
+          format: decimal
+          example: 600.00
+
+    InsuredVehicle:
+      type: object
+      required: [vin, make, model, year, licensePlate]
+      properties:
+        vin:
+          type: string
+          example: 1HGBH41JXMN109186
+        make:
+          type: string
+          example: Honda
+        model:
+          type: string
+          example: Civic
+        year:
+          type: integer
+          example: 2022
+        licensePlate:
+          type: string
+          example: IL-ABC123
+
+    InsuredProperty:
+      type: object
+      required: [propertyId, propertyAddress, propertyType, estimatedValue]
+      properties:
+        propertyId:
+          type: string
+          example: prop-001
+        propertyAddress:
+          $ref: '#/components/schemas/Address'
+        propertyType:
+          type: string
+          example: Single Family Home
+        estimatedValue:
+          type: number
+          format: decimal
+          example: 350000.00
+
+    PolicyHolder:
+      type: object
+      required: [customerId, firstName, lastName, email, phoneNumber, mailingAddress]
+      properties:
+        customerId:
+          type: string
+          example: cust-001
+        firstName:
+          type: string
+          example: Alice
+        lastName:
+          type: string
+          example: Johnson
+        email:
+          type: string
+          format: email
+          example: alice.johnson@example.com
+        phoneNumber:
+          type: string
+          example: "+1-555-0101"
+        mailingAddress:
+          $ref: '#/components/schemas/Address'
+
+    QuoteRiskDetails:
+      type: object
+      required: [vehicle, property]
+      properties:
+        vehicle:
+          $ref: '#/components/schemas/InsuredVehicle'
+          nullable: true
+        property:
+          $ref: '#/components/schemas/InsuredProperty'
+          nullable: true
+        driverAge:
+          type: integer
+          description: Age of the primary driver (AUTO policies)
+          example: 35
+        yearsWithoutClaims:
+          type: integer
+          description: Consecutive claim-free years (used for discount calculation)
+          example: 5
+        constructionType:
+          type: string
+          description: Building construction material (HOME/COMMERCIAL policies)
+          example: Wood Frame
+        buildingAge:
+          type: integer
+          description: Age of the building in years (HOME/COMMERCIAL policies)
+          example: 15
+
+    # ── Policy schemas ────────────────────────────────────────────────────────
+
+    Policy:
+      type: object
+      required:
+        - policyId
+        - policyNumber
+        - policyType
+        - policyStatus
+        - policyHolder
+        - effectiveDate
+        - expirationDate
+        - annualPremium
+        - coverages
+        - insuredVehicle
+        - insuredProperty
+        - createdAt
+        - updatedAt
+      properties:
+        policyId:
+          type: string
+          example: pol-001
+        policyNumber:
+          type: string
+          example: POL-AUTO001
+        policyType:
+          $ref: '#/components/schemas/PolicyType'
+        policyStatus:
+          $ref: '#/components/schemas/PolicyStatus'
+        policyHolder:
+          $ref: '#/components/schemas/PolicyHolder'
+        effectiveDate:
+          type: string
+          format: date
+          example: "2025-01-01"
+        expirationDate:
+          type: string
+          format: date
+          example: "2026-01-01"
+        annualPremium:
+          type: number
+          format: decimal
+          description: Sum of all coverage premiums
+          example: 1200.00
+        coverages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Coverage'
+        insuredVehicle:
+          $ref: '#/components/schemas/InsuredVehicle'
+          nullable: true
+        insuredProperty:
+          $ref: '#/components/schemas/InsuredProperty'
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-07-05T19:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-07-05T19:00:00Z"
+
+    PolicyCreateRequest:
+      type: object
+      required: [policyType, policyHolder, effectiveDate, expirationDate, coverages, insuredVehicle, insuredProperty]
+      properties:
+        policyType:
+          $ref: '#/components/schemas/PolicyType'
+        policyHolder:
+          $ref: '#/components/schemas/PolicyHolder'
+        effectiveDate:
+          type: string
+          format: date
+          example: "2026-08-01"
+        expirationDate:
+          type: string
+          format: date
+          example: "2027-08-01"
+        coverages:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Coverage'
+        insuredVehicle:
+          $ref: '#/components/schemas/InsuredVehicle'
+          nullable: true
+        insuredProperty:
+          $ref: '#/components/schemas/InsuredProperty'
+          nullable: true
+
+    PolicyUpdateRequest:
+      type: object
+      description: All fields are optional. Only provided fields will be updated.
+      properties:
+        effectiveDate:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-09-01"
+        expirationDate:
+          type: string
+          format: date
+          nullable: true
+          example: "2027-09-01"
+        coverages:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/Coverage'
+        insuredVehicle:
+          $ref: '#/components/schemas/InsuredVehicle'
+          nullable: true
+        insuredProperty:
+          $ref: '#/components/schemas/InsuredProperty'
+          nullable: true
+
+    PolicyCancelRequest:
+      type: object
+      required: [cancellationReason, cancellationDate]
+      properties:
+        cancellationReason:
+          type: string
+          example: Insured sold the vehicle
+        cancellationDate:
+          type: string
+          format: date
+          example: "2026-07-15"
+
+    PolicyListResponse:
+      type: object
+      required: [total, page, pageSize, policies]
+      properties:
+        total:
+          type: integer
+          description: Total number of matching policies
+          example: 3
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 10
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+
+    # ── Quote schemas ─────────────────────────────────────────────────────────
+
+    Quote:
+      type: object
+      required:
+        - quoteId
+        - quoteNumber
+        - policyType
+        - quoteStatus
+        - applicant
+        - riskDetails
+        - proposedCoverages
+        - estimatedAnnualPremium
+        - estimatedMonthlyPremium
+        - quoteValidUntil
+        - boundPolicyId
+        - createdAt
+        - updatedAt
+      properties:
+        quoteId:
+          type: string
+          example: qte-001
+        quoteNumber:
+          type: string
+          example: QTE-AUTO001
+        policyType:
+          $ref: '#/components/schemas/PolicyType'
+        quoteStatus:
+          $ref: '#/components/schemas/QuoteStatus'
+        applicant:
+          $ref: '#/components/schemas/PolicyHolder'
+        riskDetails:
+          $ref: '#/components/schemas/QuoteRiskDetails'
+        proposedCoverages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Coverage'
+        estimatedAnnualPremium:
+          type: number
+          format: decimal
+          example: 900.00
+        estimatedMonthlyPremium:
+          type: number
+          format: decimal
+          example: 75.00
+        quoteValidUntil:
+          type: string
+          format: date
+          example: "2026-12-31"
+        boundPolicyId:
+          type: string
+          nullable: true
+          description: ID of the policy created when this quote was bound
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-07-05T19:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-07-05T19:00:00Z"
+
+    QuoteRequest:
+      type: object
+      required: [policyType, applicant, riskDetails, desiredCoverages, requestedEffectiveDate]
+      properties:
+        policyType:
+          $ref: '#/components/schemas/PolicyType'
+        applicant:
+          $ref: '#/components/schemas/PolicyHolder'
+        riskDetails:
+          $ref: '#/components/schemas/QuoteRiskDetails'
+        desiredCoverages:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Coverage'
+        requestedEffectiveDate:
+          type: string
+          format: date
+          example: "2026-09-01"
+
+    QuoteBindRequest:
+      type: object
+      required: [quoteId, effectiveDate]
+      properties:
+        quoteId:
+          type: string
+          description: ID of the quote to bind (must match the path parameter)
+          example: qte-001
+        effectiveDate:
+          type: string
+          format: date
+          description: Effective date for the resulting policy
+          example: "2026-08-01"
+
+    QuoteListResponse:
+      type: object
+      required: [total, page, pageSize, quotes]
+      properties:
+        total:
+          type: integer
+          description: Total number of matching quotes
+          example: 2
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 10
+        quotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Quote'
+
+    # ── Common response schemas ────────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      required: [errorCode, message, timestamp]
+      properties:
+        errorCode:
+          type: string
+          description: Machine-readable error code
+          example: POLICY_NOT_FOUND
+        message:
+          type: string
+          description: Human-readable error description
+          example: "Policy with ID 'pol-999' not found"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-07-05T19:00:00Z"
+
+    SuccessResponse:
+      type: object
+      required: [message, timestamp]
+      properties:
+        message:
+          type: string
+          example: "Policy 'pol-001' has been deleted"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-07-05T19:00:00Z"
