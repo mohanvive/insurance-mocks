@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: P&C Insurance Claims Management API
+  title: Insurance Claims Management API
   description: >
     Mock REST API for handling Property & Casualty (P&C) insurance claims
     operations. Supports the full claims lifecycle including filing, reviewing,
